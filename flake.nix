@@ -1,15 +1,20 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
+    nixpkgs.url = "https://flakehub.com/f/DeterminateSystems/nixpkgs-weekly/*.tar.gz";
+    mission-control.url = "github:Platonic-Systems/mission-control";
+    flake-root.url = "github:srid/flake-root";
     haskell-flake.url = "github:srid/haskell-flake";
   };
   outputs = inputs@{ self, nixpkgs, flake-parts, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = nixpkgs.lib.systems.flakeExposed;
-      imports = [ inputs.haskell-flake.flakeModule ];
+      imports = [
+        inputs.haskell-flake.flakeModule
+        inputs.flake-root.flakeModule
+        inputs.mission-control.flakeModule
+      ];
 
-      perSystem = { self', pkgs, ... }: {
+      perSystem = { config, self', pkgs, ... }: {
 
         # Typically, you just want a single project named "default". But
         # multiple projects are also possible, each using different GHC version.
@@ -38,6 +43,7 @@
             #  };
           };
 
+          autoWire = ["packages" "checks" "apps"];
           devShell = {
             # Enabled by default
             # enable = true;
@@ -50,8 +56,23 @@
           };
         };
 
+        mission-control = {
+          scripts = {
+            nr = { exec = "nix run . -- "; description = "nix run Haskell binary"; };
+            nl = { exec = "nix run -L . -- "; description = "nix run Haskell binary with logging enabled";};
+          };
+        };
+
+        devShells.default = pkgs.mkShell {
+          inputsFrom = [
+            config.haskellProjects.default.outputs.devShell
+            config.flake-root.devShell
+            config.mission-control.devShell
+          ];
+        };
+
         # haskell-flake doesn't set the default package, but you can do it here.
-        packages.default = self'.packages.example;
+        packages.default = self'.packages.write-a-scheme;
       };
     };
 }
