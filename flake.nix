@@ -57,10 +57,10 @@
         };
 
         mission-control = {
-          scripts = {
-            nr = { exec = "nix run . -- "; description = "nix run Haskell binary"; };
-            nl = { exec = "nix run -L . -- "; description = "nix run Haskell binary with logging enabled";};
-          };
+          # scripts = {
+          #   nr = { exec = "nix run . "; description = "nix run Haskell binary"; };
+          #   nl = { exec = "nix run -L . "; description = "nix run Haskell binary with logging enabled";};
+          # };
         };
 
         devShells.default = pkgs.mkShell {
