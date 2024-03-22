@@ -9,6 +9,7 @@ data LispVal = Atom String
             | Number Integer
             | String String
             | Bool Bool
+  deriving Show
 
 parseEscaped :: Parser Char
 parseEscaped = do
@@ -52,7 +53,7 @@ spaces = skipMany1 space
 readExpr :: String -> String
 readExpr input = case parse parseExpr "lisp" input of
   Left err -> "No match: " ++ show err
-  Right _val -> "Found value"
+  Right val -> show val
 
 main :: IO ()
 main = do
