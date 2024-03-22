@@ -1,7 +1,8 @@
 module Main where
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
-import Control.Monad
+-- import Control.Monad
+-- import Text.Parsec (parserPlus)
 
 data LispVal = Atom String
             | List [LispVal]
@@ -41,10 +42,26 @@ parseAtom = do
     _    -> Atom atom)
 
 parseNumber :: Parser LispVal
-parseNumber = do
-  digits <- many1 digit
-  return ((Number . read) digits)
--- parseNumber = many1 digit >>= (\x -> return ((Number . read) x))
+parseNumber = parsePlain <|> parseRadix
+
+parsePlain :: Parser LispVal
+parsePlain = do
+  many1 digit >>= return . (Number . read)
+
+parseRadix :: Parser LispVal
+parseRadix = char '#' >> (parseBinary <|> parseOctal <|> parseDecimal <|> parseHex)
+
+parseBinary :: Parser LispVal
+parseBinary = char 'b' >> many1 (oneOf "01") >>= return . (Number . read)
+
+parseOctal :: Parser LispVal
+parseOctal = undefined
+
+parseDecimal :: Parser LispVal
+parseDecimal = undefined
+
+parseHex :: Parser LispVal
+parseHex = undefined
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
@@ -52,7 +69,7 @@ parseExpr = parseAtom
   <|> parseNumber
 
 symbol :: Parser Char
-symbol = oneOf "!#$%&|*+-/:<=>?@^_~"
+symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 
 spaces :: Parser ()
 spaces = skipMany1 space
