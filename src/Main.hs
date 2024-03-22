@@ -14,7 +14,14 @@ data LispVal = Atom String
 parseEscaped :: Parser Char
 parseEscaped = do
   _ <- char '\\'
-  oneOf ['\\', '"']
+  c <- oneOf ['\\', '"', 'n', 'r', 't']
+  return $ case c of
+    '\\' -> c
+    '"' -> c
+    'n' -> '\n'
+    'r' -> '\r'
+    't' -> '\t'
+    _ -> c
 
 parseString :: Parser LispVal
 parseString = do
