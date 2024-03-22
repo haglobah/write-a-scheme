@@ -10,10 +10,15 @@ data LispVal = Atom String
             | String String
             | Bool Bool
 
+parseEscaped :: Parser Char
+parseEscaped = do
+  _ <- char '\\'
+  oneOf ['\\', '"']
+
 parseString :: Parser LispVal
 parseString = do
   _ <- char '"'
-  x <- many (noneOf "\"")
+  x <- many (parseEscaped <|> noneOf ['\\', '"'])
   _ <- char '"'
   return (String x)
 
@@ -31,7 +36,7 @@ parseNumber :: Parser LispVal
 parseNumber = do
   digits <- many1 digit
   return ((Number . read) digits)
--- parseNumber = many1 digit >>= (Number . read)
+-- parseNumber = many1 digit >>= (\x -> return ((Number . read) x))
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
