@@ -31,6 +31,7 @@ parseNumber :: Parser LispVal
 parseNumber = do
   digits <- many1 digit
   return ((Number . read) digits)
+-- parseNumber = many1 digit >>= (Number . read)
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
