@@ -2,6 +2,7 @@ module Main where
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
 import Data.Function ((&))
+import Numeric (readOct, readHex)
 -- import Control.Monad
 -- import Text.Parsec (parserPlus)
 
@@ -53,7 +54,7 @@ parseRadix :: Parser LispVal
 parseRadix = char '#' >> (parseBinary <|> parseOctal <|> parseDecimal <|> parseHex)
 
 parseBinary :: Parser LispVal
-parseBinary = char 'b' >> many1 (oneOf "01") >>= return . (Number . bin_to_int)
+parseBinary = char 'b' >> many (oneOf "01") >>= return . Number . bin_to_int
 
 bin_to_int :: String -> Integer
 bin_to_int s =
@@ -66,14 +67,17 @@ bin_to_int s =
   where to_int '0' = 0
         to_int '1' = 1
 
+getNum :: [(Integer, String)] -> Integer
+getNum list = list & head & fst 
+
 parseOctal :: Parser LispVal
-parseOctal = undefined
+parseOctal = do char 'o' >> many (oneOf "01234567") >>= return . Number . getNum . readOct
 
 parseDecimal :: Parser LispVal
-parseDecimal = undefined
+parseDecimal = do char 'd' >> many1 digit >>= return . Number . read 
 
 parseHex :: Parser LispVal
-parseHex = undefined
+parseHex = do char 'x' >> many (oneOf "0123456789abcdef") >>= return . Number . getNum . readHex
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
