@@ -1,6 +1,7 @@
 module Main where
 import Text.ParserCombinators.Parsec hiding (spaces)
 import System.Environment
+import Data.Function ((&))
 -- import Control.Monad
 -- import Text.Parsec (parserPlus)
 
@@ -52,7 +53,18 @@ parseRadix :: Parser LispVal
 parseRadix = char '#' >> (parseBinary <|> parseOctal <|> parseDecimal <|> parseHex)
 
 parseBinary :: Parser LispVal
-parseBinary = char 'b' >> many1 (oneOf "01") >>= return . (Number . read)
+parseBinary = char 'b' >> many1 (oneOf "01") >>= return . (Number . bin_to_int)
+
+bin_to_int :: String -> Integer
+bin_to_int s =
+  s
+  & reverse
+  & map to_int
+  & zip [0..]
+  & map (\(index, bin) -> 2^index * bin)
+  & sum
+  where to_int '0' = 0
+        to_int '1' = 1
 
 parseOctal :: Parser LispVal
 parseOctal = undefined
