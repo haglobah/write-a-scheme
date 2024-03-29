@@ -12,7 +12,17 @@ data LispVal = Atom String
             | Number Integer
             | String String
             | Bool Bool
+            | Char Char
   deriving Show
+
+parseChar :: Parser LispVal
+parseChar = do 
+  _ <- string "#\\"
+  s <- many1 letter
+  return (case s of
+    "space" -> Char ' '
+    "newline" -> Char '\n'
+    [x] -> Char x)
 
 parseEscaped :: Parser Char
 parseEscaped = do
@@ -54,10 +64,10 @@ parseRadix :: Parser LispVal
 parseRadix = char '#' >> (parseBinary <|> parseOctal <|> parseDecimal <|> parseHex)
 
 parseBinary :: Parser LispVal
-parseBinary = char 'b' >> many (oneOf "01") >>= return . Number . bin_to_int
+parseBinary = char 'b' >> many (oneOf "01") >>= return . Number . binToInt
 
-bin_to_int :: String -> Integer
-bin_to_int s =
+binToInt :: String -> Integer
+binToInt s =
   s
   & reverse
   & map to_int
@@ -82,7 +92,8 @@ parseHex = do char 'x' >> many (oneOf "0123456789abcdef") >>= return . Number . 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
   <|> parseString
-  <|> parseNumber
+  <|> try parseNumber
+  <|> try parseChar
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
