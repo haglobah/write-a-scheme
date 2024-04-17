@@ -70,10 +70,12 @@ primitives = [
     ("quotient", numericBinop quot),
     ("remainder", numericBinop rem),
     ("symbol?",  unaryOp symbolP),
-    ("bool?",  unaryOp boolP),
-    ("list?",  unaryOp listP),
-    ("char?",  unaryOp charP),
-    ("string?",  unaryOp stringP)
+    ("bool?", unaryOp boolP),
+    ("list?", unaryOp listP),
+    ("char?", unaryOp charP),
+    ("string?", unaryOp stringP),
+    ("symbol->string", unaryOp symbol2string),
+    ("string->symbol", unaryOp string2symbol)
   ]
 
 symbolP (Atom _) = Bool True
@@ -90,6 +92,12 @@ charP _ = Bool False
 
 stringP (String _) = Bool True
 stringP _ = Bool False
+
+symbol2string (Atom s) = (String s)
+symbol2string _ = error "Expecting an Atom"
+
+string2symbol (String s) = (Atom s)
+string2symbol _ = error "Expecting a String"
 
 unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
 unaryOp func [arg] = func arg 
