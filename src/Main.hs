@@ -15,6 +15,42 @@ data LispVal = Atom String
             | Char Char
   deriving Show
 
+main :: IO ()
+main = do
+  (expr:_) <- getArgs
+  putStrLn (readExpr expr)
+
+readExpr :: String -> String
+readExpr input = case parse parseExpr "lisp" input of
+  Left err -> "No match: " ++ show err
+  Right val -> show val
+
+parseExpr :: Parser LispVal
+parseExpr = parseAtom
+        <|> parseString
+        <|> try parseNumber
+        <|> try parseChar
+        <|> parseQuoted
+        <|> parseQuasiQuoted
+        <|> do char '('
+               x <- try parseList <|> parseDottedList
+               char ')'
+               return x
+
+parseExprWithUnquote :: Parser LispVal
+parseExprWithUnquote = parseAtom
+                   <|> parseString
+                   <|> try parseNumber
+                   <|> try parseChar
+                   <|> parseQuoted
+                   <|> parseQuasiQuoted
+                   <|> parseUnquoted
+                   <|> parseUnquoteSpliced
+                   <|> do char '('
+                          x <- try parseList <|> parseDottedList
+                          char ')'
+                          return x
+
 parseList :: Parser LispVal
 parseList = fmap List (sepBy parseExpr spaces)
 
@@ -29,6 +65,21 @@ parseQuoted = do
   _ <- char '\''
   x <- parseExpr
   return (List [Atom "quote", x])
+
+parseQuasiQuoted :: Parser LispVal
+parseQuasiQuoted = do _ <- char '`'
+                      x <- parseExprWithUnquote
+                      return (List [Atom "quasiquote", x])
+                      
+parseUnquoted :: Parser LispVal
+parseUnquoted = do _ <- char ','
+                   x <- parseExpr
+                   return (List [Atom "unquote", x])
+
+parseUnquoteSpliced :: Parser LispVal
+parseUnquoteSpliced = do _ <- string ",@"
+                         x <- parseExpr
+                         return (List [Atom "unquote-splice", x])
 
 parseChar :: Parser LispVal
 parseChar = do 
@@ -104,29 +155,8 @@ parseDecimal = do char 'd' >> many1 digit >>= return . Number . read
 parseHex :: Parser LispVal
 parseHex = do char 'x' >> many (oneOf "0123456789abcdef") >>= return . Number . getNum . readHex
 
-parseExpr :: Parser LispVal
-parseExpr = parseAtom
-        <|> parseString
-        <|> try parseNumber
-        <|> try parseChar
-        <|> parseQuoted
-        <|> do char '('
-               x <- try parseList <|> parseDottedList
-               char ')'
-               return x
-
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
 
 spaces :: Parser ()
 spaces = skipMany1 space
-
-readExpr :: String -> String
-readExpr input = case parse parseExpr "lisp" input of
-  Left err -> "No match: " ++ show err
-  Right val -> show val
-
-main :: IO ()
-main = do
-  (expr:_) <- getArgs
-  putStrLn (readExpr expr)
