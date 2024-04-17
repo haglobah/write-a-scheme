@@ -13,7 +13,8 @@ data LispVal = Atom String
             | String String
             | Bool Bool
             | Char Char
-  deriving Show
+
+instance Show LispVal where show = showVal
 
 main :: IO ()
 main = do
@@ -50,6 +51,19 @@ parseExprWithUnquote = parseAtom
                           x <- try parseList <|> parseDottedList
                           char ')'
                           return x
+
+showVal :: LispVal -> String
+showVal (String contents) = "\"" ++ contents ++ "\""
+showVal (Char contents) = "#\\" ++ [contents]
+showVal (Atom name) = name
+showVal (Number num) = show num
+showVal (Bool True) = "#t"
+showVal (Bool False) = "#f"
+showVal (List content) = "(" ++ unwordsList content ++ ")"
+showVal (DottedList head tail) = "(" ++ unwordsList head ++ " . " ++ showVal tail ++ ")"
+
+unwordsList :: [LispVal] -> String
+unwordsList = unwords . map showVal
 
 parseList :: Parser LispVal
 parseList = fmap List (sepBy parseExpr spaces)
