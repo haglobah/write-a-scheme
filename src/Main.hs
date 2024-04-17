@@ -15,6 +15,21 @@ data LispVal = Atom String
             | Char Char
   deriving Show
 
+parseList :: Parser LispVal
+parseList = fmap List (sepBy parseExpr spaces)
+
+parseDottedList :: Parser LispVal
+parseDottedList = do
+  hd <- endBy parseExpr spaces
+  tail <- char '.' >> spaces >> parseExpr
+  return (DottedList hd tail)
+
+parseQuoted :: Parser LispVal
+parseQuoted = do
+  _ <- char '\''
+  x <- parseExpr
+  return (List [Atom "quote", x])
+
 parseChar :: Parser LispVal
 parseChar = do 
   _ <- string "#\\"
@@ -91,9 +106,14 @@ parseHex = do char 'x' >> many (oneOf "0123456789abcdef") >>= return . Number . 
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
-  <|> parseString
-  <|> try parseNumber
-  <|> try parseChar
+        <|> parseString
+        <|> try parseNumber
+        <|> try parseChar
+        <|> parseQuoted
+        <|> do char '('
+               x <- try parseList <|> parseDottedList
+               char ')'
+               return x
 
 symbol :: Parser Char
 symbol = oneOf "!$%&|*+-/:<=>?@^_~"
