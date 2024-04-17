@@ -100,10 +100,6 @@ numericBinop op params = Number (foldl1 op (map unpackNum params))
 
 unpackNum :: LispVal -> Integer
 unpackNum (Number n) = n
-unpackNum (String n) = let parsed = reads n :: [(Integer, String)] in
-                           if null parsed
-                              then 0
-                              else fst (head parsed)
 unpackNum (List [n]) = unpackNum n
 unpackNum _ = 0
 
