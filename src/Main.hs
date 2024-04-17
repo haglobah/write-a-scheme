@@ -68,8 +68,32 @@ primitives = [
     ("/", numericBinop div),
     ("mod", numericBinop mod),
     ("quotient", numericBinop quot),
-    ("remainder", numericBinop rem)
+    ("remainder", numericBinop rem),
+    ("symbol?",  unaryOp symbolP),
+    ("bool?",  unaryOp boolP),
+    ("list?",  unaryOp listP),
+    ("char?",  unaryOp charP),
+    ("string?",  unaryOp stringP)
   ]
+
+symbolP (Atom _) = Bool True
+symbolP _ = Bool False
+
+boolP (Bool _) = Bool True
+boolP _ = Bool False
+
+listP (List _) = Bool True
+listP _ = Bool False
+
+charP (Char _) = Bool True
+charP _ = Bool False
+
+stringP (String _) = Bool True
+stringP _ = Bool False
+
+unaryOp :: (LispVal -> LispVal) -> [LispVal] -> LispVal
+unaryOp func [arg] = func arg 
+
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> LispVal
 numericBinop op params = Number (foldl1 op (map unpackNum params))
