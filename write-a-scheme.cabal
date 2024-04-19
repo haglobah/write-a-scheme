@@ -9,9 +9,26 @@ build-type:      Simple
 common warnings
     ghc-options: -Wall
 
+-- common shared
+--     other-modules:    Lib
+
+-- library
+--     exposed-modules:  Lib
+--     hs-source-dirs:   lib
+--     build-depends:    base, parsec, mtl
+--     default-language: Haskell2010
+
 executable write-a-scheme
     import:           warnings
     main-is:          Main.hs
     build-depends:    base, parsec, mtl
     hs-source-dirs:   src
     default-language: Haskell2010
+
+-- test-suite write-a-scheme-test
+--     import:             shared
+--     main-is:            TestSuite.hs
+--     type:               exitcode-stdio-1.0
+--     build-depends:      base, hspec, QuickCheck
+--     hs-source-dirs:     test
+--     default-language:   Haskell2010
