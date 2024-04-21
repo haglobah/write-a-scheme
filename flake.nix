@@ -56,6 +56,24 @@
           };
         };
 
+        apps.app1 = self'.apps.write-a-scheme;
+
+        checks = {
+          parser = pkgs.runCommandNoCC "the-parser"
+          {
+            nativeBuildInputs = self'.devShells.default.nativeBuildInputs;
+          }
+          ''
+            echo "Here come the tests"
+            echo "-->"
+            # echo "${self'.apps.app1.program}"
+            [[ `${self'.apps.app1.program} '()'` == "Unrecognized special form: ()" ]]
+            [[ `${self'.apps.app1.program} '(* 2 3)'` == "6" ]]
+            echo "--> Tests end."
+            touch $out
+          '';
+        };
+
         mission-control = {
           # scripts = {
           #   nr = { exec = "nix run . "; description = "nix run Haskell binary"; };
