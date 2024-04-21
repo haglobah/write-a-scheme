@@ -17,12 +17,12 @@ data LispVal = Atom String
 instance Show LispVal where show = showVal
 
 data LispError = NumArgs Integer [LispVal]
-               | TypeMismatch String [LispVal]
-               | Parser ParseError
-               | BadSpecialForm String LispVal
-               | NotFunction String String
-               | UnboundVar String String
-               | Default String
+              | TypeMismatch String [LispVal]
+              | Parser ParseError
+              | BadSpecialForm String LispVal
+              | NotFunction String String
+              | UnboundVar String String
+              | Default String
 
 instance Show LispError where show = showError
 
@@ -67,17 +67,17 @@ parseExpr = parseAtom
 
 parseExprWithUnquote :: Parser LispVal
 parseExprWithUnquote = parseAtom
-                   <|> parseString
-                   <|> try parseNumber
-                   <|> try parseChar
-                   <|> parseQuoted
-                   <|> parseQuasiQuoted
-                   <|> parseUnquoted
-                   <|> parseUnquoteSpliced
-                   <|> do char '('
-                          x <- try parseList <|> parseDottedList
-                          char ')'
-                          return x
+                  <|> parseString
+                  <|> try parseNumber
+                  <|> try parseChar
+                  <|> parseQuoted
+                  <|> parseQuasiQuoted
+                  <|> parseUnquoted
+                  <|> parseUnquoteSpliced
+                  <|> do char '('
+                         x <- try parseList <|> parseDottedList
+                         char ')'
+                         return x
 
 eval :: LispVal -> ThrowsError LispVal
 eval val@(String _) = return val 
@@ -107,7 +107,20 @@ primitives = [
     ("char?", unaryOp charP),
     ("string?", unaryOp stringP),
     ("symbol->string", unaryOp symbol2string),
-    ("string->symbol", unaryOp string2symbol)
+    ("string->symbol", unaryOp string2symbol),
+    ("=", numBoolBinop (==)),
+    ("<", numBoolBinop (<)),
+    (">", numBoolBinop (>)),
+    ("/=", numBoolBinop (/=)),
+    (">=", numBoolBinop (>=)),
+    ("<=", numBoolBinop (<=)),
+    ("&&", boolBoolBinop (&&)),
+    ("||", boolBoolBinop (||)),
+    ("string=?", strBoolBinop (==)),
+    ("string<?", strBoolBinop (<)),
+    ("string>?", strBoolBinop (>)),
+    ("string<=?", strBoolBinop (<=)),
+    ("string>=?", strBoolBinop (>=))
   ]
 
 symbolP (Atom _) = Bool True
@@ -134,6 +147,26 @@ string2symbol _ = error "Expecting a String"
 unaryOp :: (LispVal -> LispVal) -> [LispVal] -> ThrowsError LispVal
 unaryOp func [arg] = return (func arg)
 
+boolBinop :: (LispVal -> ThrowsError a) -> (a -> a -> Bool) -> [LispVal] -> ThrowsError LispVal
+boolBinop unpacker op args = if length args /= 2
+                            then throwError (NumArgs 2 args)
+                            else do left <- unpacker (args !! 0)
+                                    right <- unpacker (args !! 1)
+                                    return (Bool (left `op` right))
+
+numBoolBinop = boolBinop unpackNum
+strBoolBinop = boolBinop unpackStr
+boolBoolBinop = boolBinop unpackBool
+
+unpackStr :: LispVal -> ThrowsError String
+unpackStr (String s) = return s
+unpackStr (Number s) = return (show s)
+unpackStr (Bool s) = return (show s)
+unpackStr notString = throwError (TypeMismatch "string" [notString])
+
+unpackBool :: LispVal -> ThrowsError Bool
+unpackBool (Bool b) = return b
+unpackBool notBool = throwError (TypeMismatch "bool" [notBool])
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
 numericBinop _op [] = throwError (NumArgs 2 [])
