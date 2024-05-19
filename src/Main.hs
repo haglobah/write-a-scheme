@@ -6,6 +6,7 @@ import System.Environment
 import Data.Function ((&))
 import Numeric (readOct, readHex)
 import Control.Monad.Except
+import System.IO
 -- import Text.Parsec (parserPlus)
 
 data LispVal = Atom String
@@ -29,6 +30,7 @@ data LispError = NumArgs Integer [LispVal]
 data Unpacker = forall a . Eq a => AnyUnpacker (LispVal -> ThrowsError a)
 
 instance Show LispError where show = showError
+type ThrowsError = Either LispError
 
 showError :: LispError -> String
 showError (UnboundVar message varname) = message <> ": " <> varname
@@ -38,8 +40,6 @@ showError (NumArgs expected found) = "Expected " <> show expected <> " args: fou
 showError (TypeMismatch expected found) = "Invalid type: expected " <> expected <> ", found " <> show found
 showError (Parser parseErr) = "Parse error at " <> show parseErr
 showError (Default err) = show err
-
-type ThrowsError = Either LispError
 
 trapError action = catchError action (return . show)
 
@@ -57,15 +57,38 @@ equal :: [LispVal] -> ThrowsError LispVal
 equal [arg1, arg2] = do
   primitiveEquals <- or <$> mapM (unpackEquals arg1 arg2)
                      [AnyUnpacker unpackNum, AnyUnpacker unpackStr, AnyUnpacker unpackBool]
-  eqvEquals <- eqv [arg1, arg2]
-  return $ Bool $ (primitiveEquals || let (Bool x) = eqvEquals in x)
+  eqvEquals <- equal [arg1, arg2]
+  return $ Bool (primitiveEquals || let (Bool x) = eqvEquals in x)
 equal badArgList = throwError $ NumArgs 2 badArgList
 
+flushStr :: String -> IO ()
+flushStr str = putStr str >> hFlush stdout
+
+readPrompt :: String -> IO String
+readPrompt prompt = flushStr prompt >> getLine
+
+evalString :: String -> IO String
+evalString expr = return $ extractValue $ trapError (fmap show $ readExpr expr >>= eval)
+
+evalAndPrint :: String -> IO ()
+evalAndPrint expr = evalString expr >>= putStrLn
+
+until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
+until_ cond prompt action = do
+  result <- prompt
+  if cond result
+    then return ()
+    else action result >> until_ cond prompt action
+
+runRepl :: IO ()
+runRepl = until_ (== "quit") (readPrompt "λ> ") evalAndPrint
+
 main :: IO ()
-main = do 
-  args <- getArgs
-  let evaled = fmap show $ readExpr (head args) >>= eval
-  putStrLn $ extractValue $ trapError evaled
+main = do args <- getArgs
+          case length args of
+            0 -> runRepl
+            1 -> evalAndPrint $ head args
+            x -> putStrLn $ "expecting 0 or 1 args, " <> show x <> " were given"
 
 readExpr :: String -> ThrowsError LispVal
 readExpr input = case parse parseExpr "lisp" input of
