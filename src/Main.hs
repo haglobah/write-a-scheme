@@ -7,6 +7,8 @@ import Data.Function ((&))
 import Numeric (readOct, readHex)
 import Control.Monad.Except
 import System.IO
+import Control.Monad.IO.Class
+import Data.IORef
 -- import Text.Parsec (parserPlus)
 
 data LispVal = Atom String
@@ -30,7 +32,29 @@ data LispError = NumArgs Integer [LispVal]
 data Unpacker = forall a . Eq a => AnyUnpacker (LispVal -> ThrowsError a)
 
 instance Show LispError where show = showError
+
 type ThrowsError = Either LispError
+type IOThrowsError = ExceptT LispError IO
+type Env = IORef [(String, IORef LispVal)]
+
+liftThrows :: ThrowsError a -> IOThrowsError a
+liftThrows (Left err) = throwError err
+liftThrows (Right val) = return val
+
+runIOThrows :: IOThrowsError String -> IO String
+runIOThrows action = runExceptT (trapError action) >>= return . extractValue
+
+nullEnv :: IO Env
+nullEnv = newIORef []
+
+isBound :: Env -> String -> IO Bool
+isBound envRef var = readIORef envRef >>= return . maybe False (const True) . lookup var
+
+getVar :: Env -> String -> IOThrowsError LispVal
+getVar envRef var = do env <- liftIO $ readIORef envRef
+                       maybe (throwError $ UnboundVar "Getting an unbound variable" var)
+                             (liftIO . readIORef)
+                             (lookup var env)
 
 showError :: LispError -> String
 showError (UnboundVar message varname) = message <> ": " <> varname
