@@ -19,7 +19,7 @@ data LispVal = Atom String
 instance Show LispVal where show = showVal
 
 data LispError = NumArgs Integer [LispVal]
-              | TypeMismatch String [LispVal]
+              | TypeMismatch String LispVal
               | Parser ParseError
               | BadSpecialForm String LispVal
               | NotFunction String String
@@ -107,7 +107,8 @@ eval (List [Atom "if", pred, conseq, alt]) =
   do result <- eval pred
      case result of
         Bool False -> eval alt
-        _otherwise -> eval conseq
+        Bool True -> eval conseq
+        _otherwise -> throwError (TypeMismatch "bool" pred)
 eval (List (Atom func : args)) = mapM eval args >>= apply func
 eval badForm = throwError (BadSpecialForm "Unrecognized special form" badForm)
 
@@ -119,14 +120,14 @@ apply func args = maybe (throwError (NotFunction "Unrecognized primitive functio
 car :: [LispVal] -> ThrowsError LispVal
 car [List (x : _xs)]         = return x
 car [DottedList (x : _xs) _] = return x
-car [badArg]               = throwError (TypeMismatch "pair" [badArg])
+car [badArg]               = throwError (TypeMismatch "pair" badArg)
 car badArgList             = throwError (NumArgs 1 badArgList)
 
 cdr :: [LispVal] -> ThrowsError LispVal
 cdr [List (_x : xs)]        = return (List xs)
 cdr [DottedList [_] x]      = return x
 cdr [DottedList (_ : xs) x] = return (DottedList xs x)
-cdr [badArg]                = throwError (TypeMismatch "pair" [badArg])
+cdr [badArg]                = throwError (TypeMismatch "pair" badArg)
 cdr badArgList              = throwError (NumArgs 1 badArgList)
 
 cons :: [LispVal] -> ThrowsError LispVal
@@ -226,11 +227,11 @@ unpackStr :: LispVal -> ThrowsError String
 unpackStr (String s) = return s
 unpackStr (Number s) = return (show s)
 unpackStr (Bool s) = return (show s)
-unpackStr notString = throwError (TypeMismatch "string" [notString])
+unpackStr notString = throwError (TypeMismatch "string" notString)
 
 unpackBool :: LispVal -> ThrowsError Bool
 unpackBool (Bool b) = return b
-unpackBool notBool = throwError (TypeMismatch "bool" [notBool])
+unpackBool notBool = throwError (TypeMismatch "bool" notBool)
 
 numericBinop :: (Integer -> Integer -> Integer) -> [LispVal] -> ThrowsError LispVal
 numericBinop _op [] = throwError (NumArgs 2 [])
@@ -240,7 +241,7 @@ numericBinop op params = mapM unpackNum params >>= return . Number . (foldl1 op)
 unpackNum :: LispVal -> ThrowsError Integer
 unpackNum (Number n) = return n
 unpackNum (List [n]) = unpackNum n
-unpackNum notNum = throwError (TypeMismatch "number" [notNum])
+unpackNum notNum = throwError (TypeMismatch "number" notNum)
 
 showVal :: LispVal -> String
 showVal (String contents) = "\"" ++ contents ++ "\""
