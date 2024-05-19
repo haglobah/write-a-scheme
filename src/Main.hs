@@ -56,6 +56,30 @@ getVar envRef var = do env <- liftIO $ readIORef envRef
                              (liftIO . readIORef)
                              (lookup var env)
 
+setVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+setVar envRef var value = do env <- liftIO $ readIORef envRef
+                             maybe (throwError $ UnboundVar "Setting an unbound variable" var)
+                                   (liftIO . (flip writeIORef value))
+                                   (lookup var env)
+                             return value
+
+defineVar :: Env -> String -> LispVal -> IOThrowsError LispVal
+defineVar envRef var value = do
+  alreadyDefined <- liftIO $ isBound envRef var
+  if alreadyDefined
+    then setVar envRef var value >> return value
+    else liftIO $ do
+      valueRef <- newIORef value
+      env <- readIORef envRef
+      writeIORef envRef ((var, valueRef) : env)
+      return value
+
+bindVars :: Env -> [(String, LispVal)] -> IO Env
+bindVars envRef bindings = readIORef envRef >>= extendEnv bindings >>= newIORef
+  where extendEnv bindings env = fmap (++ env) (mapM addBinding bindings)
+        addBinding (var, value) = do ref <- newIORef value
+                                     return (var, ref)
+
 showError :: LispError -> String
 showError (UnboundVar message varname) = message <> ": " <> varname
 showError (BadSpecialForm message form) = message <> ": " <> show form
@@ -91,11 +115,11 @@ flushStr str = putStr str >> hFlush stdout
 readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
-evalString :: String -> IO String
-evalString expr = return $ extractValue $ trapError (fmap show $ readExpr expr >>= eval)
+evalString :: Env -> String -> IO String
+evalString env expr = runIOThrows $ fmap show $ liftThrows (readExpr expr) >>= eval env
 
-evalAndPrint :: String -> IO ()
-evalAndPrint expr = evalString expr >>= putStrLn
+evalAndPrint :: Env -> String -> IO ()
+evalAndPrint env expr = evalString env expr >>= putStrLn
 
 until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
 until_ cond prompt action = do
@@ -104,14 +128,17 @@ until_ cond prompt action = do
     then return ()
     else action result >> until_ cond prompt action
 
+runOne :: String -> IO ()
+runOne expr = nullEnv >>= flip evalAndPrint expr
+
 runRepl :: IO ()
-runRepl = until_ (== "quit") (readPrompt "λ> ") evalAndPrint
+runRepl = nullEnv >>= until_ (== "quit") (readPrompt "λ> ") . evalAndPrint
 
 main :: IO ()
 main = do args <- getArgs
           case length args of
             0 -> runRepl
-            1 -> evalAndPrint $ head args
+            1 -> runOne $ head args
             x -> putStrLn $ "expecting 0 or 1 args, " <> show x <> " were given"
 
 readExpr :: String -> ThrowsError LispVal
@@ -145,19 +172,24 @@ parseExprWithUnquote = parseAtom
                          char ')'
                          return x
 
-eval :: LispVal -> ThrowsError LispVal
-eval val@(String _) = return val 
-eval val@(Number _) = return val 
-eval val@(Bool _) = return val 
-eval (List [Atom "quote", val]) = return val
-eval (List [Atom "if", pred, conseq, alt]) =
-  do result <- eval pred
+eval :: Env -> LispVal -> IOThrowsError LispVal
+eval _env val@(String _) = return val 
+eval _env val@(Number _) = return val 
+eval _env val@(Bool _) = return val
+eval env (Atom id) = getVar env id
+eval _env (List [Atom "quote", val]) = return val
+eval env (List [Atom "if", pred, conseq, alt]) =
+  do result <- eval env pred
      case result of
-        Bool False -> eval alt
-        Bool True -> eval conseq
+        Bool False -> eval env alt
+        Bool True -> eval env conseq
         _otherwise -> throwError (TypeMismatch "bool" pred)
-eval (List (Atom func : args)) = mapM eval args >>= apply func
-eval badForm = throwError (BadSpecialForm "Unrecognized special form" badForm)
+eval env (List [Atom "set!", Atom var, form]) =
+  eval env form >>= setVar env var
+eval env (List [Atom "define", Atom var, form]) =
+  eval env form >>= defineVar env var
+eval env (List (Atom func : args)) = mapM (eval env) args >>= liftThrows . apply func
+eval _env badForm = throwError (BadSpecialForm "Unrecognized special form" badForm)
 
 apply :: String -> [LispVal] -> ThrowsError LispVal
 apply func args = maybe (throwError (NotFunction "Unrecognized primitive function args" func))
