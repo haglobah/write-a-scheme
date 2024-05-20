@@ -354,7 +354,7 @@ primitives = [
     ("cdr", cdr),
     ("cons", cons),
     ("eq?", eqv),
-    ("eqv?g", eqv),
+    ("eqv?", eqv),
     ("equal?", equal)
   ]
 
