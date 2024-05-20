@@ -153,6 +153,7 @@ readExprList = readOrThrow (endBy parseExpr spaces)
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
+        <|> parseBool
         <|> parseString
         <|> try parseNumber
         <|> try parseChar
@@ -165,6 +166,7 @@ parseExpr = parseAtom
 
 parseExprWithUnquote :: Parser LispVal
 parseExprWithUnquote = parseAtom
+                  <|> parseBool
                   <|> parseString
                   <|> try parseNumber
                   <|> try parseChar
@@ -490,15 +492,23 @@ parseString = do
   _ <- char '"'
   return (String x)
 
+parseBool :: Parser LispVal
+parseBool = do char '#' 
+               c <- oneOf "tf"
+               return (case c of
+                't' -> Bool True
+                'f' -> Bool False)
+
 parseAtom :: Parser LispVal
 parseAtom = do
   first <- letter <|> symbol
   rest <- many (letter <|> digit <|> symbol)
-  let atom = first:rest
-  return (case atom of
-    "#t" -> Bool True
-    "#f" -> Bool False
-    _    -> Atom atom)
+  return (Atom (first:rest))
+  -- let atom = first:rest
+  -- return (case atom of
+  --   "#t" -> Bool True
+  --   "#f" -> Bool False
+  --   _    -> Atom atom)
 
 parseNumber :: Parser LispVal
 parseNumber = parsePlain <|> parseRadix
