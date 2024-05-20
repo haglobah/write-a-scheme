@@ -21,6 +21,8 @@ data LispVal = Atom String
             | PrimitiveFunc ([LispVal] -> ThrowsError LispVal)
             | Func { params :: [String], vararg :: Maybe String,
                      body :: [LispVal], closure :: Env}
+            | IOFunc ([LispVal] -> IOThrowsError LispVal)
+            | Port Handle
 
 instance Show LispVal where show = showVal
 
@@ -116,27 +118,38 @@ until_ cond prompt action = do
     then return ()
     else action result >> until_ cond prompt action
 
-runOne :: String -> IO ()
-runOne expr = primitiveBindings >>= flip evalAndPrint expr
+runOne :: [String] -> IO ()
+runOne args = do
+  env <- primitiveBindings >>= flip bindVars [("args", List $ map String $ drop 1 args)]
+  runIOThrows (show <$> eval env (List [Atom "load", String (head args)]))
+    >>= hPutStrLn stderr
 
 runRepl :: IO ()
 runRepl = primitiveBindings >>= until_ (== "quit") (readPrompt "λ> ") . evalAndPrint
 
 primitiveBindings :: IO Env
-primitiveBindings = nullEnv >>= flip bindVars (map makePrimitiveFunc primitives)
-  where makePrimitiveFunc (var, func) = (var, PrimitiveFunc func)
+primitiveBindings =
+  nullEnv >>= flip bindVars (map (makeFunc IOFunc) ioPrimitives
+                            ++ map (makeFunc PrimitiveFunc) primitives)
+  where makeFunc constructor (var, func) = (var, constructor func)
+
 
 main :: IO ()
 main = do args <- getArgs
           case length args of
             0 -> runRepl
-            1 -> runOne $ head args
-            x -> putStrLn $ "expecting 0 or 1 args, " <> show x <> " were given"
+            _ -> runOne $ args
 
-readExpr :: String -> ThrowsError LispVal
-readExpr input = case parse parseExpr "lisp" input of
+readOrThrow :: Parser a -> String -> ThrowsError a
+readOrThrow parser input = case parse parser "lisp" input of
   Left err -> throwError (Parser err)
   Right val -> return val
+
+readExpr :: String -> ThrowsError LispVal
+readExpr = readOrThrow parseExpr
+
+readExprList :: String -> ThrowsError [LispVal]
+readExprList = readOrThrow (endBy parseExpr spaces)
 
 parseExpr :: Parser LispVal
 parseExpr = parseAtom
@@ -190,6 +203,8 @@ eval env (List (Atom "lambda" : DottedList params varargs : body)) =
   makeVarArgs varargs env params body
 eval env (List (Atom "lambda" : varargs@(Atom _) : body)) =
   makeVarArgs varargs env [] body
+eval env (List [Atom "load", String filename]) =
+  load filename >>= fmap last . mapM (eval env)
 eval env (List (function : args)) = do
   func <- eval env function
   argVals <- mapM (eval env) args
@@ -208,6 +223,7 @@ apply (Func params varargs body closure) args =
         bindVarArgs arg env = case arg of
           Just argName -> liftIO $ bindVars env [(argName, List remainingArgs)]
           Nothing -> return env
+apply (IOFunc func) args = func args
 apply non_func _args = throwError (NotFunction "Wrong expression in function position" (show non_func))
 
 car :: [LispVal] -> ThrowsError LispVal
@@ -263,6 +279,45 @@ makeFunc :: Monad m => Maybe String -> Env -> [LispVal] -> [LispVal] -> m LispVa
 makeFunc varargs env params body = return $ Func (map showVal params) varargs body env
 makeNormalFunc = makeFunc Nothing
 makeVarArgs = makeFunc . Just . showVal
+
+ioPrimitives :: [(String, [LispVal] -> IOThrowsError LispVal)]
+ioPrimitives = [("apply", applyProc),
+                ("open-input-file", makePort ReadMode),
+                ("open-output-file", makePort WriteMode),
+                ("close-input-port", closePort),
+                ("close-output-port", closePort),
+                ("read", readProc),
+                ("write", writeProc),
+                ("read-contents", readContents),
+                ("read-all", readAll)]
+
+applyProc :: [LispVal] -> IOThrowsError LispVal
+applyProc [func, List args] = apply func args
+applyProc (func : args) = apply func args
+
+makePort :: IOMode -> [LispVal] -> IOThrowsError LispVal
+makePort mode [String filename] = fmap Port $ liftIO $ openFile filename mode
+
+closePort :: [LispVal] -> IOThrowsError LispVal
+closePort [Port port] = liftIO $ hClose port >> return (Bool True)
+closePort _           = return (Bool False)
+
+readProc :: [LispVal] -> IOThrowsError LispVal
+readProc []          = readProc [Port stdin]
+readProc [Port port] = liftIO (hGetLine port) >>= liftThrows . readExpr
+
+writeProc :: [LispVal] -> IOThrowsError LispVal
+writeProc [obj]            = writeProc [obj, Port stdout]
+writeProc [obj, Port port] = liftIO $ hPrint port obj >> return (Bool True)
+
+readContents :: [LispVal] -> IOThrowsError LispVal
+readContents [String filename] = fmap String $ liftIO $ readFile filename
+
+load :: String -> IOThrowsError [LispVal]
+load filename = liftIO (readFile filename) >>= liftThrows . readExprList
+
+readAll :: [LispVal] -> IOThrowsError LispVal
+readAll [String filename] = fmap List $ load filename
 
 primitives :: [(String, [LispVal] -> ThrowsError LispVal)]
 primitives = [
@@ -371,6 +426,8 @@ showVal (Func {params = args, vararg = varargs, body = _body, closure = _env}) =
     (case varargs of
       Nothing -> ""
       Just arg -> " . " ++ arg) ++ ") ...)"
+showVal (IOFunc _) = "<IO primitive>"
+showVal (Port _) = "<IO port>"
 
 unwordsList :: [LispVal] -> String
 unwordsList = unwords . map showVal
